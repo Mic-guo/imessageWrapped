@@ -2,7 +2,57 @@ import React, { useState, useEffect } from "react";
 import "./css/index.css";
 // import * as SQL from 'sql.js';
 import initSqlJs from "sql.js";
+import { decodeMessageBuffer, getTextFromBuffer } from "./buffer/buffer";
+import AtRule from "postcss/lib/at-rule";
 // import sqlWasm from "!!file-loader?name=sql-wasm-[contenthash].wasm!sql.js/dist/sql-wasm.wasm";
+
+async function updateMessages(db) {
+  const messagesWithNullText = await db.exec(`
+                          SELECT attributedBody 
+                          FROM message
+                          WHERE text IS NULL AND attributedBody IS NOT NULL
+                          LIMIT 15;
+                        `);
+  console.log(messagesWithNullText[0]);
+  if (messagesWithNullText.length) {
+    // console.log(
+    //   `Adding parsed text to ${messagesWithNullText.length} messages`
+    // );
+    const firstQueryResult = messagesWithNullText[0];
+    for (const attributedBody of firstQueryResult.values) {
+      // const attributedBody = row[0]; // Since there's only one column, it's the first element
+      console.log(attributedBody[0]);
+      const parsed = await decodeMessageBuffer(attributedBody[0]);
+      if (parsed) {
+        const string = parsed[0]?.value?.string;
+        if (typeof string === "string") {
+          console.log(string);
+        }
+      }
+      // Now you can work with each 'attributedBody' value
+      // console.log(attributedBody);
+    }
+
+    // await db.transaction().execute(async (trx) => {
+    // for (const message of messagesWithNullText.value) {
+    //   try {
+    //     const { attributedBody, ROWID } = message;
+    //     if (attributedBody) {
+    //       const parsed = await decodeMessageBuffer(attributedBody);
+    //       if (parsed) {
+    //         const string = parsed[0]?.value?.string;
+    //         console.log(string);
+    //         // Update the database with the new string
+    //         // Add your database update logic here
+    //       }
+    //     }
+    //   } catch (error) {
+    //     console.error("Error updating message:", error);
+    //   }
+    // }
+    // });
+  }
+}
 
 function App() {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -16,7 +66,7 @@ function App() {
     return () => {
       fileSelector.removeEventListener("change", handleFileChange);
     };
-  }, []); // Empty dependency array ensures that the effect runs only once after initial render
+  }, [selectedFile]); // Empty dependency array ensures that the effect runs only once after initial render
 
   const handleFileChange = (event) => {
     const files = event.target.files;
@@ -45,21 +95,22 @@ function App() {
               },
             });
             const db = new SQL.Database(databaseData);
+            await updateMessages(db);
 
-            const queryResult = db.exec(`
-                                    SELECT date, id, text
-                                    FROM message
-                                    LEFT JOIN handle ON message.handle_id = handle.ROWID
-                                    ORDER BY date DESC
-                                  `);
+            // const queryResult = db.exec(`
+            //                         SELECT date, id, text
+            //                         FROM message
+            //                         LEFT JOIN handle ON message.handle_id = handle.ROWID
+            //                         ORDER BY date DESC
+            //                       `);
 
-            // Fetch results
-            if (queryResult.length > 0 && queryResult[0].values) {
-              const resultSet = queryResult[0].values;
-              console.log("Query Result Set:", resultSet);
-            } else {
-              console.error("No results returned from the query.");
-            }
+            // // Fetch results
+            // if (queryResult.length > 0 && queryResult[0].values) {
+            //   const resultSet = queryResult[0].values;
+            //   console.log("Query Result Set:", resultSet);
+            // } else {
+            //   console.error("No results returned from the query.");
+            // }
             setDb(db);
           } catch (err) {
             console.log(err);
@@ -83,19 +134,33 @@ function App() {
     }
   };
 
+  const clearFileSelection = () => {
+    setSelectedFile(null);
+    const fileSelector = document.getElementById("file-selector");
+    if (fileSelector) {
+      fileSelector.value = ""; // Clear the file input
+    }
+    console.clear();
+  };
+
   return (
     <>
       <div className="font-mukta-malar flex flex-col h-screen justify-center items-center bg-pink-200 text-white">
         <div>
           <p className="font-sans text-5xl">Attach your chat.db</p>
         </div>
-        <input type="file" id="file-selector" />
-        {selectedFile && (
-          <div>
-            <h3>Selected File:</h3>
-            <p>{selectedFile.name}</p>
-          </div>
-        )}
+        <div className="flex flex-col">
+          <input type="file" id="file-selector" />
+          {/* {selectedFile && (
+            <div>
+              <h3>Selected File:</h3>
+              <p>{selectedFile.name}</p>
+            </div>
+          )} */}
+          <button className=" p-2 shadow-lg w-28" onClick={clearFileSelection}>
+            Clear File
+          </button>
+        </div>
 
         {/* {selectedFile && (
           <getInfoButton
